@@ -176,7 +176,7 @@ log — [docs/security.md](docs/security.md).
 ## Folder structure
 
 ```text
-neuroforge-ai/
+Neuroforage-AI/            (repository root)
 ├── README.md  LICENSE  Makefile  pyproject.toml  alembic.ini  docker-compose.yml  .env.example
 ├── docs/                architecture · ingestion · retrieval · knowledge-graph · reasoning · evaluation · security · deployment · decisions/
 ├── backend/
@@ -208,6 +208,8 @@ change URLs).
 Prerequisites: Python 3.10+, Node 18+ (20 recommended). No database or Redis is needed for local runs.
 
 ```bash
+git clone https://github.com/Yog-esh06/Neuroforage-AI.git && cd Neuroforage-AI
+
 # backend
 python -m venv .venv
 .venv/Scripts/python -m pip install -e ".[dev]"        # macOS/Linux: .venv/bin/python
