@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  background: #0a0b0e;
+  color: #ece9e2;
+  font-feature-settings: "cv11", "ss01", "tnum";
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 500px at 85% -10%, rgba(139, 124, 246, 0.06), transparent 60%),
+    radial-gradient(900px 400px at -10% 110%, rgba(45, 212, 230, 0.04), transparent 60%);
+  background-attachment: fixed;
+}
+
+::selection { background: rgba(139, 124, 246, 0.35); }
+
+* { scrollbar-width: thin; scrollbar-color: #343944 transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #343944; border-radius: 4px; }
+
+.label-micro {
+  @apply font-mono text-2xs uppercase tracking-[0.14em] text-paper-mute;
+}
+
+.hairline { @apply border border-ink-500/80; }
+
+.num { font-variant-numeric: tabular-nums; font-family: theme("fontFamily.mono"); }
+
+/* React Flow dark skin */
+.react-flow__attribution { display: none; }
+.react-flow__controls button { background: #161920; border-bottom: 1px solid #252932; fill: #b9b6ae; }
+.react-flow__controls button:hover { background: #1c1f27; }
+.react-flow__minimap { background: #0d0e12 !important; border: 1px solid #252932; }
+.react-flow__edge-text { fill: #b9b6ae; font-size: 9px; font-family: theme("fontFamily.mono"); }
+
+mark.hl { background: rgba(245, 185, 66, 0.28); color: inherit; border-radius: 2px; padding: 0 1px; }
+mark.hl-add { background: rgba(52, 211, 153, 0.22); color: inherit; border-radius: 2px; }
+mark.hl-del { background: rgba(242, 96, 107, 0.22); color: inherit; border-radius: 2px; text-decoration: line-through; }

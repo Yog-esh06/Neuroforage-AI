@@ -1,0 +1,91 @@
+# docker compose up --build
+# Services: frontend, backend, postgres, redis, worker  (+ optional nginx via `--profile proxy`)
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-development}
+  DATABASE_URL: postgresql+psycopg2://neuroforge:${POSTGRES_PASSWORD:-neuroforge}@postgres:5432/neuroforge
+  REDIS_URL: redis://redis:6379/0
+  JOB_BACKEND: celery
+  STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+  STORAGE_DIR: /data/storage/documents
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-openssl-rand-hex-32}
+  SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@neuroforge.local}
+  SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-neuroforge-admin}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+  LLM_PROVIDER: ${LLM_PROVIDER:-extractive}
+  LLM_MODEL: ${LLM_MODEL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-hashing}
+  MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-50}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: neuroforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-neuroforge}
+      POSTGRES_DB: neuroforge
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neuroforge -d neuroforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build: { context: ., dockerfile: deployment/Dockerfile.backend }
+    environment: *backend-env
+    ports: ["8000:8000"]
+    volumes: [storage:/data/storage]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  worker:
+    build: { context: ., dockerfile: deployment/Dockerfile.backend }
+    command: ["celery", "-A", "app.workers.celery_app.celery_app", "worker", "-l", "info", "-Q", "ingestion,analysis", "-c", "2"]
+    environment: *backend-env
+    volumes: [storage:/data/storage]
+    depends_on:
+      backend: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck: { disable: true }
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deployment/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports: ["3000:3000"]
+    depends_on: [backend]
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    profiles: [proxy]
+    volumes: ["./deployment/nginx.conf:/etc/nginx/nginx.conf:ro"]
+    ports: ["8080:80"]
+    depends_on: [frontend, backend]
+
+volumes:
+  pgdata:
+  storage:

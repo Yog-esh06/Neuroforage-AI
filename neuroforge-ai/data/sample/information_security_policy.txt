@@ -1,0 +1,14 @@
+Information Security Policy
+
+Purpose
+This policy defines the security responsibilities of all employees at Northwind Technologies Inc.
+
+Scope
+This policy applies to all employees, contractors and systems. Compliance with GDPR and SOC 2 is mandatory.
+
+Responsibilities
+All employees must complete security training annually. Violations of this policy may result in disciplinary action.
+Employees must report any data breach or unauthorized access within 24 hours.
+
+Review
+Approved by: Priya Nair, Chief Information Officer. Effective date: February 1, 2025. Next review date: February 1, 2026.

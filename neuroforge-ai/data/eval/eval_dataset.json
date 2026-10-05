@@ -1,0 +1,55 @@
+{
+  "description": "Evaluation set for the sample corpus in data/sample. Labels are written from the generated source documents (backend/scripts/generate_sample_data.py), not from system output.",
+  "classification": {
+    "master_services_agreement_acme_globex.pdf": "Contract",
+    "amendment_1_acme_globex.pdf": "Contract",
+    "invoice_inv2041.pdf": "Invoice",
+    "invoice_inv2042_total_error.pdf": "Invoice",
+    "scanned_invoice_inv3307.pdf": "Invoice",
+    "research_paper_hybrid_retrieval.pdf": "Research Paper",
+    "annual_report_fy2025.pdf": "Financial Report",
+    "information_security_policy.txt": "Policy",
+    "resume_jane_doe.docx": "Resume",
+    "vendor_costs_fy2026.xlsx": "Financial Report"
+  },
+  "retrieval": [
+    {"id": "r01", "question": "When does the master services agreement expire?", "expected": [{"document": "master_services_agreement_acme_globex.pdf", "phrases": ["expires on June 30, 2027"]}]},
+    {"id": "r02", "question": "What is the total contract value?", "expected": [{"document": "master_services_agreement_acme_globex.pdf", "phrases": ["$2,000,000"]}, {"document": "amendment_1_acme_globex.pdf", "phrases": ["$2,400,000"]}]},
+    {"id": "r03", "question": "What law governs the amendment?", "expected": [{"document": "amendment_1_acme_globex.pdf", "phrases": ["laws of New York"]}]},
+    {"id": "r04", "question": "What are the liquidated damages for missed milestones?", "expected": [{"document": "master_services_agreement_acme_globex.pdf", "phrases": ["Liquidated damages of $250,000"]}]},
+    {"id": "r05", "question": "How long is the notice period to terminate?", "expected": [{"document": "master_services_agreement_acme_globex.pdf", "phrases": ["30 days written notice"]}, {"document": "amendment_1_acme_globex.pdf", "phrases": ["60 days written notice"]}]},
+    {"id": "r06", "question": "Which invoice has a total due of $19,500?", "expected": [{"document": "invoice_inv2042_total_error.pdf", "phrases": ["19,500.00"]}]},
+    {"id": "r07", "question": "What is the invoice number of the scanned invoice?", "expected": [{"document": "scanned_invoice_inv3307.pdf", "phrases": ["INV-3307", "INV3307"]}]},
+    {"id": "r08", "question": "What was the revenue in fiscal year 2025?", "expected": [{"document": "annual_report_fy2025.pdf", "phrases": ["$48.2 million", "$48.2M"]}]},
+    {"id": "r09", "question": "Was a material weakness identified by the auditors?", "expected": [{"document": "annual_report_fy2025.pdf", "phrases": ["material weakness"]}]},
+    {"id": "r10", "question": "What recall improvement does the hybrid retrieval method achieve?", "expected": [{"document": "research_paper_hybrid_retrieval.pdf", "phrases": ["Recall@10 improves from 0.71 to 0.86"]}]},
+    {"id": "r11", "question": "Which datasets or baselines were used in the retrieval experiments?", "expected": [{"document": "research_paper_hybrid_retrieval.pdf", "phrases": ["dense-only baseline", "BM25 baselines"]}]},
+    {"id": "r12", "question": "Within how many hours must employees report a data breach?", "expected": [{"document": "information_security_policy.txt", "phrases": ["within 24 hours"]}]},
+    {"id": "r13", "question": "Who approved the information security policy?", "expected": [{"document": "information_security_policy.txt", "phrases": ["Priya Nair"]}]},
+    {"id": "r14", "question": "What machine learning experience does the candidate have?", "expected": [{"document": "resume_jane_doe.docx", "phrases": ["Machine Learning Engineer", "PyTorch"]}]},
+    {"id": "r15", "question": "What is the annual cost of the managed services vendor?", "expected": [{"document": "vendor_costs_fy2026.xlsx", "phrases": ["Globex Industries Ltd"]}]},
+    {"id": "r16", "question": "Which late payment interest rate applies?", "expected": [{"document": "master_services_agreement_acme_globex.pdf", "phrases": ["2% per month"]}, {"document": "amendment_1_acme_globex.pdf", "phrases": ["1.5% per month"]}]},
+    {"id": "r17", "question": "Who signed the agreement for Acme Corp?", "expected": [{"document": "master_services_agreement_acme_globex.pdf", "phrases": ["Maria Gonzalez"]}, {"document": "amendment_1_acme_globex.pdf", "phrases": ["Maria Gonzalez"]}]},
+    {"id": "r18", "question": "What is the liability cap for the supplier?", "expected": [{"document": "amendment_1_acme_globex.pdf", "phrases": ["shall not exceed $5,000,000"]}]}
+  ],
+  "answers": [
+    {"id": "a01", "question": "When does the contract expire?", "key_facts": ["June 30, 2027", "September 30, 2027"]},
+    {"id": "a02", "question": "What is the governing law?", "key_facts": ["Delaware", "New York"]},
+    {"id": "a03", "question": "What was the revenue in fiscal year 2025?", "key_facts": ["$48.2 million"]},
+    {"id": "a04", "question": "Within how many hours must employees report a data breach?", "key_facts": ["24 hours"]},
+    {"id": "a05", "question": "Who is the CEO of Acme Corp?", "key_facts": ["Maria Gonzalez"]},
+    {"id": "a06", "question": "What are the major financial risks mentioned across these documents?", "key_facts": ["material weakness", "Liquidated damages"]},
+    {"id": "a07", "question": "What is the capital of Atlantis and who rules it?", "key_facts": [], "must_refuse": true},
+    {"id": "a08", "question": "zxqv plorbnax wibble frumious quuxbar", "key_facts": [], "must_refuse": true}
+  ],
+  "contradictions": [
+    {"topic": "Contract expiration", "documents": ["master_services_agreement_acme_globex.pdf", "amendment_1_acme_globex.pdf"]},
+    {"topic": "Contract value", "documents": ["master_services_agreement_acme_globex.pdf", "amendment_1_acme_globex.pdf"]},
+    {"topic": "Governing law", "documents": ["master_services_agreement_acme_globex.pdf", "amendment_1_acme_globex.pdf"]},
+    {"topic": "Notice period", "documents": ["master_services_agreement_acme_globex.pdf", "amendment_1_acme_globex.pdf"]},
+    {"topic": "Payment terms", "documents": ["master_services_agreement_acme_globex.pdf", "amendment_1_acme_globex.pdf"]},
+    {"topic": "Late payment rate", "documents": ["master_services_agreement_acme_globex.pdf", "amendment_1_acme_globex.pdf"], "note": "added after review: first run of the evaluation surfaced it; verified in the source (2% vs 1.5% per month)"},
+    {"topic": "Late payment rate", "documents": ["master_services_agreement_acme_globex.pdf", "invoice_inv2041.pdf"], "note": "added after review: invoice states 1.5% per month, MSA states 2%"},
+    {"topic": "Late payment rate", "documents": ["master_services_agreement_acme_globex.pdf", "invoice_inv2042_total_error.pdf"], "note": "added after review: invoice states 1.5% per month, MSA states 2%"}
+  ]
+}

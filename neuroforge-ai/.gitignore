@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+*.egg-info/
+node_modules/
+.next/
+frontend/.env.local
+storage/documents/*
+storage/artifacts/*
+storage/*.db
+!storage/**/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+*.log
+.DS_Store
