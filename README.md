@@ -1,325 +1,298 @@
 # NeuroForge AI
 
-**Multimodal document intelligence and decision automation — every important AI conclusion is traceable to evidence.**
+### Evidence-grounded document intelligence and decision support for complex business records.
 
-NeuroForge ingests contracts, invoices, scans, reports and spreadsheets; classifies them, extracts layout, tables, entities and
-a knowledge graph; retrieves evidence with hybrid search and reranking; reasons over it with a provider-agnostic LLM layer
-whose output is *validated against the cited sources*; detects contradictions across documents; routes risky findings to a
-human review queue through user-defined workflows; and records a hash-chained audit trail that lets an auditor reconstruct
-how any conclusion was reached.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Frontend-Next.js-black?logo=next.js)](https://nextjs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-It is not a PDF chatbot. When the evidence does not support an answer, it refuses.
+NeuroForge AI ingests business documents, extracts structured content and evidence, and makes that information searchable through a web console and API. Its hybrid retrieval, evidence-checked answers, contradiction detection, human review workflows, and hash-chained audit trail are designed to make findings traceable to their source.
+
+> **Notice:** NeuroForge AI is an experimental prototype, not a certified compliance, legal, financial, or records-management system. Validate findings against original documents and qualified reviewers before making consequential decisions.
 
 ## Contents
 
-[Overview](#overview) · [Problem statement](#problem-statement) · [Architecture](#architecture) · [AI pipeline](#ai-pipeline) ·
-[Multimodal processing](#multimodal-processing) · [Hybrid retrieval](#hybrid-retrieval) · [Knowledge graph](#knowledge-graph) ·
-[Reasoning architecture](#reasoning-architecture) · [Evidence system](#evidence-system) · [Confidence engine](#confidence-engine) ·
-[Human-in-the-loop](#human-in-the-loop) · [Workflow engine](#workflow-engine) · [Evaluation](#evaluation) · [Security](#security) ·
-[Tech stack](#tech-stack) · [Folder structure](#folder-structure) · [Installation](#installation) · [Environment variables](#environment-variables) ·
-[Docker](#docker) · [API documentation](#api-documentation) · [Testing](#testing) · [Deployment](#deployment) ·
-[Limitations](#limitations) · [Future research](#future-research)
+- [What the project delivers](#what-the-project-delivers)
+- [Quick start](#quick-start)
+- [System architecture](#system-architecture)
+- [Scientific design / Methodology](#scientific-design--methodology)
+- [Installation and operation](#installation-and-operation)
+- [Repository structure](#repository-structure)
+- [License](#license)
 
-## Overview
+## What the project delivers
 
-| Capability | What it does | Where |
-|---|---|---|
-| Ingestion | Validated upload → async job → `QUEUED → PROCESSING → INDEXING → READY / FAILED` | `ingestion/`, `services/document_service.py`, `workers/` |
-| Classification | Content-based (Contract, Invoice, Research Paper, Financial Report, Technical Documentation, Policy, Resume, Legal Document, General Report, Unknown) | `ai/extraction/classifier.py` |
-| OCR + layout | OCR decided per page; headings, paragraphs, lists, tables, figures, headers/footers with bounding boxes and section paths | `ingestion/` |
-| Entities + graph | 11 entity types, typed relationships, evidence on every edge, multi-hop traversal | `ai/extraction/`, `knowledge/` |
-| Hybrid retrieval | semantic + BM25 + metadata + graph → 7-feature reranker | `ai/retrieval/` |
-| Grounded reasoning | evidence-only generation; unsupported claims and fabricated citations removed; refusal | `ai/reasoning/` |
-| Contradictions | typed-fact comparison across documents, never silently resolved | `ai/reasoning/contradiction.py` |
-| Confidence | engineering index with documented components | `ai/reasoning/confidence.py` |
-| Review + workflows | approve / reject / modify / escalate / request evidence; IF-THEN rules | `services/review_service.py`, `workflows/` |
-| Comparison | semantic clause alignment, typed change detection | `services/comparison_service.py` |
-| Audit | append-only, hash-chained, verifiable | `services/audit_service.py` |
+| Capability | Implementation |
+|---|---|
+| Multiformat ingestion | Validates and processes PDF, images, text, Markdown, CSV, Excel, and DOCX files. Extracts page layout, tables, and OCR text where needed. |
+| Document understanding | Content-based document classification, deterministic entity and relationship extraction, chunking, and provenance linking. |
+| Hybrid evidence retrieval | Combines dense or hashing-based semantic search, BM25 lexical search, metadata filters, and knowledge-graph expansion with a feature-based reranker. |
+| Grounded question answering | Retrieves source passages, generates an answer using the configured provider, validates claims and citations against evidence, and refuses unsupported answers. |
+| Knowledge graph and insights | Builds evidence-linked entity relationships and detects selected risks, table-total discrepancies, and cross-document contradictions. |
+| Human review and workflows | Routes selected findings for review and supports configurable rules and actions, with decisions recorded for audit. |
+| Web console and API | Next.js interface for documents, search, knowledge, insights, review, workflows, comparisons, and audit; FastAPI endpoints are under `/api/v1`. |
+| Evaluation | Provides a sample-corpus evaluation runner for retrieval, answer grounding, classification, and contradiction metrics. |
 
-## Problem statement
+## Quick start
 
-Organisations hold decisions in unstructured documents. Chat-over-PDF tools return fluent answers with no way to check them,
-cannot notice that two documents disagree, and leave no record an auditor can rely on. NeuroForge treats *evidence* as the
-unit of truth: facts are extracted deterministically with provenance, retrieval returns scored passages with page-level
-locations, generation is checked claim-by-claim against those passages, disagreements are surfaced, and humans make the
-consequential decisions.
+Prerequisites: Python 3.10 or later, Node.js 18 or later, and npm. Docker, PostgreSQL, and Redis are not required for a basic local run.
 
-## Architecture
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+Copy-Item .env.example .env
+```
+
+In a terminal at the repository root, start the API:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000 --app-dir backend
+```
+
+In a second terminal, start the frontend:
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). The local configuration uses SQLite, inline background jobs, local file storage, and the extractive answer provider. The seeded administrator credentials are controlled by `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` in `.env`; change them before exposing the application.
+
+## System architecture
+
+NeuroForge is structured as a modular backend with a separate web console. In local development the API can process jobs inline; a deployment can use Celery workers backed by Redis.
 
 ```mermaid
 flowchart LR
-  subgraph Browser
-    UI["Next.js console<br/>(React Flow · Recharts · Framer Motion)"]
-  end
-  subgraph Backend["FastAPI backend"]
-    API[api/v1] --> SVC[services]
-    SVC --> ING[ingestion]
-    SVC --> AI["ai/ extraction · retrieval · reasoning · evaluation"]
-    SVC --> KG[knowledge graph]
-    SVC --> WF[workflow engine]
-  end
-  UI -- "REST + JWT" --> API
-  SVC --- DB[("PostgreSQL / SQLite")]
-  SVC --- OBJ[("Object storage<br/>local / S3")]
-  SVC -. jobs .-> REDIS[(Redis)] --> WORKER[Celery worker]
-  AI -. optional .-> LLM["LLM provider<br/>(extractive · OpenAI · Anthropic · compatible)"]
+    Browser[Browser] --> UI[Next.js console]
+    UI -->|REST API and JWT| API[FastAPI API]
+    API --> SVC[Application services]
+    SVC --> ING[Document ingestion]
+    ING --> EXTRACT[Extraction and OCR]
+    EXTRACT --> INDEX[Chunks and embeddings]
+    INDEX --> KG[Knowledge graph and insights]
+    SVC --> RET[Hybrid retrieval]
+    RET --> REASON[Evidence-grounded reasoning]
+    REASON --> REVIEW[Review and workflow engine]
+    SVC --> DB[(SQLite or PostgreSQL)]
+    SVC --> STORE[(Local or S3 storage)]
+    SVC -. optional queued jobs .-> REDIS[(Redis)]
+    REDIS --> WORKER[Celery worker]
+    WORKER --> ING
+    REASON -. optional provider .-> LLM[LLM provider]
+    REVIEW --> AUDIT[Hash-chained audit log]
+    AUDIT --> DB
 ```
-
-Details and layering rules: [docs/architecture.md](docs/architecture.md).
-
-## AI pipeline
 
 ```mermaid
-flowchart TD
-  A[Document] --> B[Ingestion + validation]
-  B --> C[Document classification]
-  C --> D{"Native text?"}
-  D -- no --> E[OCR + table-grid recovery]
-  D -- yes --> F[Text / layout extraction]
-  E --> G[Layout model: pages → elements]
-  F --> G
-  G --> H[Entity + table extraction]
-  H --> I[Chunking + embeddings]
-  I --> J[Knowledge graph construction]
-  J --> K[Insights + contradictions]
-  K --> L[Workflow engine]
-  L --> M[Human review queue]
-  M --> N[(Audit trail)]
-  I --> O[Hybrid retrieval]
-  J --> O
-  O --> P[Grounded reasoning + validation]
-  P --> Q[Confidence + conflicts]
-  Q --> M
+sequenceDiagram
+    actor User
+    participant UI as Next.js console
+    participant API as FastAPI
+    participant Service as Application service
+    participant Worker as Inline job or Celery worker
+    participant Store as Database and file storage
+    participant Search as Retrieval and reasoning
+
+    User->>UI: Upload document or ask a question
+    UI->>API: Authenticated REST request
+    API->>Service: Validate request and apply business logic
+    alt Document upload
+        Service->>Store: Save validated file and document record
+        Service->>Worker: Schedule processing
+        Worker->>Store: Extract, classify, chunk, and persist evidence
+        Worker->>Store: Build embeddings, graph links, and findings
+        UI->>API: Poll document status
+        API-->>UI: Processing status and evidence-backed results
+    else Question
+        Service->>Search: Retrieve and rerank evidence
+        Search->>Store: Load indexed chunks and graph context
+        Store-->>Search: Source passages and provenance
+        Search->>Search: Generate and validate claims against evidence
+        Search-->>Service: Answer, citations, confidence, or refusal
+        Service->>Store: Persist answer and audit event
+        Service-->>UI: Grounded response and source citations
+    end
+    UI-->>User: Display status, findings, or cited answer
 ```
 
-## Multimodal processing
+## Scientific design / Methodology
 
-Text (headings, paragraphs, lists, metadata), **tables** (header detection, typed columns, cell relationships, total
-reconciliation), **images/figures** (embedded images, vector charts, captions), **scanned PDFs** (OCR chosen automatically per
-page; RapidOCR or Tesseract; deskew/denoise; ruled-table recovery), spreadsheets, DOCX, plain text and Markdown.
-Every element keeps page number, bounding box (where available), source document, section path and type —
-[docs/ingestion.md](docs/ingestion.md).
+Processing combines deterministic rules with optional statistical or language-model components. Upload validation and file-type detection precede extraction. Native PDF text is preferred; OCR is selected per page when text is missing or insufficient. The pipeline extracts layout and tables from supported document formats, classifies content, identifies entities and typed relationships, then creates page- and section-aware chunks with source locations.
 
-## Hybrid retrieval
+Search combines semantic similarity, BM25, metadata signals, and graph expansion. The default `hashing` embedding backend is deterministic feature hashing with curated concept features; it is not a neural embedding model. The optional `sbert` backend uses sentence-transformers. A feature-based reranker combines candidate scores and exposes them for inspection.
 
-Semantic embeddings, BM25, metadata filters (document, page, type, date, entity, section, chunk type) and knowledge-graph
-expansion feed a reranker scoring semantic similarity, lexical relevance, metadata relevance, entity overlap, graph
-relevance, recency and source quality. Results expose per-feature scores — [docs/retrieval.md](docs/retrieval.md).
+Answer generation receives retrieved evidence and must cite it. Post-generation validation removes invalid citations and unsupported claims, including unsupported numeric values; if no supported answer remains, the system refuses. The default `extractive` provider creates deterministic answers from evidence without an external API key. Confidence scores are engineering indices, not calibrated probabilities. Extraction, contradiction detection, and grounding each have documented coverage and limitations; see the [architecture](docs/architecture.md), [ingestion](docs/ingestion.md), [retrieval](docs/retrieval.md), [reasoning](docs/reasoning.md), and [evaluation](docs/evaluation.md) documentation.
 
-## Knowledge graph
+## Installation and operation
 
-Entities and relationships with source evidence, entity/relationship lookup, multi-hop traversal, path tracing, an interactive
-explorer where every edge opens the sentence and page it came from — [docs/knowledge-graph.md](docs/knowledge-graph.md).
+### Local development
 
-## Reasoning architecture
+1. Install Python 3.10+ and Node.js 18+.
+2. Create and activate a virtual environment, then install the backend and development dependencies:
 
-Provider abstraction (`LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`) with a local deterministic default; versioned prompts;
-**post-generation validation** that strips fabricated citations, drops unsupported numbers/claims and refuses when nothing is
-supported; contradiction detection; per-finding confidence — [docs/reasoning.md](docs/reasoning.md).
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install -e ".[dev]"
+   ```
 
-## Evidence system
+   On macOS or Linux, activate with `source .venv/bin/activate`.
+3. Copy `.env.example` to `.env` and adjust the settings you need. Optionally install the spaCy English model for statistical NER:
 
-```json
-{ "document_id": 6, "page_number": 1, "section": "Agreement > 1. Term and Termination",
-  "text": "…expires on June 30, 2027.", "relevance_score": 0.74, "retrieval_method": "lexical+semantic",
-  "source_location": { "chunk_id": 12, "bbox": [56, 301, 539, 352] } }
-```
+   ```powershell
+   python -m spacy download en_core_web_sm
+   ```
 
-Answers cite `[document - Page N]`. Clicking a citation opens the document viewer on that page with the passage's bounding
-box highlighted.
+4. Run the API from the repository root:
 
-## Confidence engine
+   ```powershell
+   python -m uvicorn app.main:app --reload --port 8000 --app-dir backend
+   ```
 
-`score = (0.25·retrieval + 0.15·quantity + 0.20·agreement + 0.15·source reliability + 0.25·model certainty) · (1 − contradiction penalty)`.
-HIGH ≥ 0.75, MEDIUM ≥ 0.50, LOW below. **This is an engineering confidence index, not a calibrated probability**; the
-disclaimer is returned with every score.
+5. In another terminal, install and run the frontend:
 
-## Human-in-the-loop
+   ```powershell
+   Set-Location frontend
+   npm install
+   npm run dev
+   ```
 
-Review tasks carry type, priority, AI recommendation, evidence, confidence, reviewer, status and audit history. Actions:
-**approve, reject, modify, escalate, request more evidence** (which runs additional retrieval and attaches new evidence).
-Decisions are final, attributed, update the underlying insight/contradiction, and are audited.
+6. Visit [http://localhost:3000](http://localhost:3000). The API's interactive documentation is at [http://localhost:8000/docs](http://localhost:8000/docs). Generate sample documents with `python backend/scripts/generate_sample_data.py`.
 
-## Workflow engine
+### Configuration
 
-```text
-IF   insight.severity_score >= 0.7  AND  insight.confidence >= 0.5
-THEN create_review_task
-```
-
-Triggers: `document_ready`, `insight_created`, `contradiction_detected`, `manual`. Conditions: nested all/any over a
-validated field set. Actions: `create_review_task`, `flag_document`, `set_insight_status`, `add_audit_note`. Every evaluation
-stores a trace (field, operator, expected, actual, passed). Four default workflows are seeded.
-
-## Evaluation
-
-`make eval` ingests the sample corpus into an isolated database and measures Recall@K, Precision@K, MRR, nDCG, retrieval
-ablations, citation coverage, groundedness, answer relevance (including must-refuse cases), classification
-precision/recall/F1 and contradiction recall/precision. Results and caveats: [docs/evaluation.md](docs/evaluation.md).
-
-## Security
-
-JWT auth with four roles, upload validation (extension + magic bytes + size + names + path confinement), validated inputs,
-CORS allow-list, secrets only from the environment, secret-redacting logs, production start-up guards, hash-chained audit
-log — [docs/security.md](docs/security.md).
-
-## Tech stack
-
-| Area | Choice |
-|---|---|
-| API | FastAPI, Pydantic v2, SQLAlchemy 2, Alembic |
-| Data | PostgreSQL (SQLite for local), Redis, Celery, S3-compatible storage |
-| Documents | PyMuPDF, OpenCV, RapidOCR (ONNX) / Tesseract, pandas, openpyxl, python-docx |
-| NLP / retrieval | spaCy, scikit-learn (feature hashing), own BM25, NumPy exact vector index, NetworkX; optional sentence-transformers |
-| Frontend | Next.js 14, TypeScript, Tailwind CSS, shadcn-style Radix primitives, Framer Motion, Lucide, Recharts, React Flow |
-
-## Folder structure
-
-```text
-Neuroforage-AI/            (repository root)
-├── README.md  LICENSE  Makefile  pyproject.toml  alembic.ini  docker-compose.yml  .env.example
-├── docs/                architecture · ingestion · retrieval · knowledge-graph · reasoning · evaluation · security · deployment · decisions/
-├── backend/
-│   ├── app/
-│   │   ├── main.py  core/ (config, logging, security, exceptions)
-│   │   ├── api/v1/  documents search knowledge insights review workflows comparison audit auth system
-│   │   ├── db/      session, base, models/ (users, documents, knowledge, reasoning, review, workflow, audit)
-│   │   ├── schemas/ requests, serializers, evidence
-│   │   ├── services/  document search reasoning knowledge insight review workflow comparison audit stats
-│   │   ├── ai/      providers/ embeddings/ retrieval/ extraction/ reasoning/ evaluation/
-│   │   ├── ingestion/ pipeline pdf ocr images tables layout chunking formats
-│   │   ├── knowledge/ graph builder traversal
-│   │   ├── workflows/ engine conditions actions
-│   │   ├── workers/   celery_app ingestion_tasks embedding_tasks analysis_tasks
-│   │   └── utils/     hashing storage text
-│   ├── migrations/  scripts/  tests/{unit,integration,api}
-├── frontend/        app/ (routes) · components/ · lib/
-├── data/            sample/ eval/ processed/
-├── storage/         documents/ artifacts/
-└── deployment/      Dockerfile.backend  Dockerfile.frontend  nginx.conf
-```
-
-Frontend routes: `/` landing · `/login` · `/dashboard` · `/documents` · `/documents/[id]` · `/search` · `/knowledge` · `/compare` ·
-`/insights` · `/review` · `/workflows` · `/audit` (authenticated routes live in the `(console)` route group, which does not
-change URLs).
-
-## Installation
-
-Prerequisites: Python 3.10+, Node 18+ (20 recommended). No database or Redis is needed for local runs.
-
-```bash
-git clone https://github.com/Yog-esh06/Neuroforage-AI.git && cd Neuroforage-AI
-
-# backend
-python -m venv .venv
-.venv/Scripts/python -m pip install -e ".[dev]"        # macOS/Linux: .venv/bin/python
-.venv/Scripts/python -m spacy download en_core_web_sm  # optional: statistical NER
-cp .env.example .env                                   # edit secrets
-.venv/Scripts/python backend/scripts/generate_sample_data.py
-cd backend && ../.venv/Scripts/python -m uvicorn app.main:app --port 8000
-
-# frontend (second terminal)
-cd frontend && npm install && npm run dev              # http://localhost:3000
-```
-
-Sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`. Upload `data/sample/*` from **Documents**.
-
-## Environment variables
+Settings are read from environment variables and the root `.env` file. The defaults below are suitable only for local development. Do not deploy with the example credentials or placeholder JWT secret.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `APP_ENV` | `development` | `production` disables auto table creation and enforces secure config |
-| `DATABASE_URL` | SQLite file | `postgresql+psycopg2://…` in Docker/production |
-| `JOB_BACKEND` | `inline` | `inline` (thread pool), `celery` (Redis workers), `sync` (tests) |
-| `REDIS_URL` | `redis://localhost:6379/0` | Celery broker/backend |
-| `STORAGE_BACKEND`, `STORAGE_DIR`, `S3_*` | `local` | object storage |
-| `MAX_UPLOAD_MB`, `MAX_PAGES` | `50`, `500` | upload limits |
-| `AUTH_ENABLED`, `JWT_SECRET`, `JWT_EXPIRE_MINUTES` | `true` | authentication |
-| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_NAME` | see `.env.example` | first admin |
-| `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_BASE_URL` | `extractive` | reasoning provider (server-side only) |
-| `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`, `EMBEDDING_DIM` | `hashing` | `sbert` for dense embeddings |
-| `OCR_ENGINE`, `OCR_MIN_CHARS_PER_PAGE` | `auto`, `40` | OCR selection / trigger |
-| `CORS_ORIGINS` | `http://localhost:3000` | allowed browser origins |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | frontend → API base URL |
+| `APP_ENV` | `development` | In `production`, requires safer auth configuration and disables automatic table creation; apply Alembic migrations. |
+| `DATABASE_URL` | SQLite | Database connection; Docker Compose configures PostgreSQL. |
+| `JOB_BACKEND` | `inline` | Run jobs inline locally or set to `celery` for queued worker jobs. |
+| `REDIS_URL` | `redis://localhost:6379/0` | Celery broker when `JOB_BACKEND=celery`. |
+| `STORAGE_BACKEND`, `STORAGE_DIR` | `local` | Select local document storage or S3-compatible storage. |
+| `S3_BUCKET`, `S3_ENDPOINT_URL`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Empty/default region | S3-compatible storage settings when `STORAGE_BACKEND=s3`. |
+| `AUTH_ENABLED` | `true` | Enable authentication. Keep enabled in production. |
+| `JWT_SECRET` | Development placeholder | Signing secret; set a strong secret in production. |
+| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_NAME` | Local administrator defaults | Initial administrator account; replace the password before deployment. |
+| `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed browser origins. |
+| `LLM_PROVIDER` | `extractive` | `extractive`, `openai`, `anthropic`, or `openai_compatible`. |
+| `LLM_MODEL`, `LLM_API_KEY`, `LLM_BASE_URL` | Empty | Provider model and server-side credentials/URL where applicable. |
+| `EMBEDDING_BACKEND` | `hashing` | Set to `sbert` to use sentence-transformers; install with `pip install -e ".[sbert]"`. |
+| `OCR_ENGINE`, `OCR_MIN_CHARS_PER_PAGE` | `auto`, `40` | OCR selection and native-text threshold. |
+| `MAX_UPLOAD_MB`, `MAX_PAGES` | `50`, `500` | Upload and document page limits. |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | API base URL used by the frontend. |
 
-## Docker
+### Docker Compose
 
-```bash
-cp .env.example .env
-docker compose up --build        # frontend :3000 · backend :8000 · postgres · redis · worker
+For the multi-service setup with PostgreSQL, Redis, a Celery worker, and the web console:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
 ```
 
-## API documentation
+The console is served on port 3000 and the API on port 8000. The optional Nginx proxy can be started with the `proxy` profile. See [deployment documentation](docs/deployment.md) for production configuration, migrations, and storage options.
 
-Interactive OpenAPI: `http://localhost:8000/docs`. All routes are under `/api/v1`.
+### Tests and evaluation
 
-| Area | Endpoints |
-|---|---|
-| Auth | `POST /auth/login` · `GET /auth/me` · `POST /auth/register` (admin) |
-| Documents | `POST /documents` · `GET /documents` · `GET /documents/{id}` · `…/pages[/{n}[/image]]` · `…/entities` · `…/tables` · `…/insights` · `…/file` · `POST …/reprocess` · `POST …/versions` · `DELETE` |
-| Search | `POST /search` (hybrid) · `POST /search/ask` (grounded) · `GET /search/answers/{id}` |
-| Knowledge | `GET /knowledge/entities` · `…/entities/{id}` · `…/entities/{id}/graph` · `…/overview` · `…/paths` · `…/stats` |
-| Insights | `GET /insights` · `PATCH /insights/{id}/status` · `GET /insights/contradictions` · `PATCH …/contradictions/{id}` · `POST /insights/analyze/{doc}` |
-| Review | `GET /review/tasks` · `GET /review/tasks/{id}` · `POST /review/tasks/{id}/action` |
-| Workflows | `GET/POST /workflows` · `PATCH/DELETE /workflows/{id}` · `POST …/run` · `GET /workflows/runs` · `GET /workflows/meta` |
-| Compare | `POST /compare` |
-| Audit | `GET /audit` · `GET /audit/{id}` · `GET /audit/verify` · `GET /audit/actions` |
-| System | `GET /health` · `GET /stats/dashboard` |
+Install the `dev` extra, then run:
 
-Errors share one envelope: `{"error": {"code", "message", "details"}}`.
-
-## Testing
-
-```bash
-make test          # or: .venv/Scripts/python -m pytest
-make test-fast     # skips OCR / full-pipeline tests
-make eval          # evaluation framework
+```powershell
+python -m pytest
+python -m pytest -m "not slow"
 ```
 
-Unit: ingestion (valid / corrupted / truncated / blank / scanned / large PDFs, type sniffing, path traversal), grounded
-generation (fabricated citations, unsupported values, refusal, fallback), contradictions, confidence, classification,
-entity/relationship extraction, risk rules, reranking. Integration: the real sample corpus end-to-end (retrieval
-strategies, filters, graph traversal, insights, contradictions, answers, workflows, review, comparison, dashboard truthfulness,
-audit-chain tamper detection). API: authentication, authorization, validation, 404s, upload security, CORS, secret leakage.
+Use `make eval` to run the evaluation framework. The Makefile commands expect GNU Make; on Windows, run the corresponding Python/npm commands directly or use a compatible Make environment.
 
-### Verification scripts (no Docker or Redis required)
+## Repository structure
 
-| Command | What it proves |
-|---|---|
-| `make verify-postgres` | starts a real embedded PostgreSQL 16 (`pip install -e ".[verify]"`), applies the Alembic migration, checks there is no model/migration drift, and runs the API + integration suite against it |
-| `make verify-worker` | an upload is accepted by the API and consumed by a **separate Celery worker process** (filesystem broker; on Windows `pywin32` is installed with the `dev` extra) |
-| `make eval` | quality metrics on the labelled corpus ([docs/evaluation.md](docs/evaluation.md)) |
+```text
+Neuroforage-AI/
+├── README.md
+├── LICENSE
+├── Makefile
+├── alembic.ini
+├── docker-compose.yml
+├── pyproject.toml
+├── .env.example
+├── backend/
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── ai/
+│   │   │   ├── embeddings/
+│   │   │   ├── evaluation/
+│   │   │   ├── extraction/
+│   │   │   ├── providers/
+│   │   │   ├── reasoning/
+│   │   │   └── retrieval/
+│   │   ├── api/v1/
+│   │   ├── core/
+│   │   ├── db/
+│   │   ├── ingestion/
+│   │   ├── knowledge/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   ├── workers/
+│   │   └── workflows/
+│   ├── migrations/
+│   ├── scripts/
+│   └── tests/
+│       ├── api/
+│       ├── integration/
+│       └── unit/
+├── data/
+│   ├── eval/
+│   ├── processed/
+│   └── sample/
+├── deployment/
+│   ├── Dockerfile.backend
+│   ├── Dockerfile.frontend
+│   └── nginx.conf
+├── docs/
+│   ├── decisions/
+│   ├── architecture.md
+│   ├── deployment.md
+│   ├── evaluation.md
+│   ├── ingestion.md
+│   ├── knowledge-graph.md
+│   ├── reasoning.md
+│   ├── retrieval.md
+│   └── security.md
+├── frontend/
+│   ├── app/
+│   ├── components/
+│   └── lib/
+└── storage/
+    ├── artifacts/
+    └── documents/
+```
 
-### What has and has not been verified in this repository
+## License
 
-Verified by running it: the backend (93 tests on SQLite; API + integration suite on PostgreSQL 16), the Alembic migration, the
-async ingestion lifecycle through the HTTP API, OCR on a rotated noisy scan, a real Celery worker consuming a job, the
-production Next.js build and TypeScript check, and every console page rendered in headless Chrome against live data.
-**Not verified** (no Docker daemon or Redis server was available on the development machine): `docker compose up --build`,
-the two Dockerfiles, the nginx profile, and Celery against a real Redis broker. The compose file is syntactically valid and its
-service wiring was checked, but treat the first `docker compose up` on your machine as the real test.
+MIT License
 
-## Deployment
+Copyright (c) 2026 NeuroForge AI contributors
 
-Vercel (frontend), Render / Railway / AWS / Azure (backend), managed PostgreSQL, S3-compatible storage —
-[docs/deployment.md](docs/deployment.md).
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-## Limitations
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-* **Embeddings:** the default encoder is a hashing/concept encoder, not a neural model; enable `sbert` for dense semantics.
-* **Extraction recall** is bounded by the rule tables; no coreference resolution beyond contract references; no
-  dependency-parse relations. Borderless scanned tables are not reconstructed.
-* **Contradiction detection** covers a fixed set of fact types (dates, amounts, durations, rates, governing law, auto-renewal,
-  revenue/income/EBITDA, headcount), not arbitrary semantic conflicts.
-* **Grounding validation** uses lexical support as a proxy for entailment; heavy paraphrase can be dropped.
-* **Confidence** is an engineering index, uncalibrated.
-* **Scale:** exact in-memory vector index and per-process caches (see architecture.md).
-* **Security:** JWT in `localStorage`, no rate limiting/MFA/document-level ACLs (see security.md).
-* **Evaluation** runs on a small synthetic corpus; scores are indicative, not benchmarks.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-## Future research
-
-Calibrated confidence from reviewer outcomes; NLI-based claim verification; learned reranker (LTR) trained on review
-feedback; table-structure recognition models for borderless scans; layout-aware multimodal encoders; relation extraction with
-dependency parses or a fine-tuned extractor validated against the rule baseline; incremental fact tables for large-scale
-contradiction detection; pgvector/FAISS-HNSW indexing; document-level access control and external audit anchoring.
+<p align="center"><strong>NeuroForge AI</strong><br>Evidence-grounded intelligence for documents and decisions.</p>
